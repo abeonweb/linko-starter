@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -15,20 +16,30 @@ type server struct {
 	httpServer *http.Server
 	store      store.Store
 	cancel     context.CancelFunc
+	logger     *slog.Logger
 }
 
-func newServer(store store.Store, port int, cancel context.CancelFunc) *server {
+func requestLogger(logger *slog.Logger) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			next.ServeHTTP(w, r)
+			logger.Info(fmt.Sprintf("Served request: %s %s", r.Method, r.URL.Path))
+		})
+	}
+}
+func newServer(store store.Store, port int, cancel context.CancelFunc, logger *slog.Logger) *server {
 	mux := http.NewServeMux()
 
 	srv := &http.Server{
 		Addr:    fmt.Sprintf(":%d", port),
-		Handler: mux,
+		Handler: requestLogger(logger)(mux),
 	}
 
 	s := &server{
 		httpServer: srv,
 		store:      store,
 		cancel:     cancel,
+		logger:     logger,
 	}
 
 	mux.HandleFunc("GET /", s.handlerIndex)

@@ -1,0 +1,5 @@
+DEBUG: 2026/04/20 07:18:51 Linko is running on http://localhost:8899
+DEBUG: 2026/04/20 07:19:03 Served request: GET /
+DEBUG: 2026/04/20 07:19:03 Served request: GET /api/stats
+DEBUG: 2026/04/20 07:19:03 Served request: POST /admin/shutdown
+DEBUG: 2026/04/20 07:19:03 Linko is shutting down
