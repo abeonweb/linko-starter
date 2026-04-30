@@ -14,6 +14,7 @@ import (
 
 	pkgerr "github.com/pkg/errors"
 
+	"boot.dev/linko/internal/build"
 	"boot.dev/linko/internal/linkoerr"
 	"boot.dev/linko/internal/store"
 )
@@ -32,10 +33,21 @@ func main() {
 
 func run(ctx context.Context, cancel context.CancelFunc, httpPort int, dataDir string) int {
 	logger, closeLogger, err := initializeLogger(os.Getenv("LINKO_LOG_FILE"))
+	hostname, hostnameErr := os.Hostname()
+	if hostnameErr != nil{
+		fmt.Fprintf(os.Stderr, "failed to initialize logger: %v\n", hostnameErr)
+	}
+	logger = logger.With(
+		slog.String("git_sha", build.GitSHA),
+		slog.String("build_time", build.BuildTime),
+		slog.String("env", os.Getenv("ENV")),
+		slog.String("hostname", hostname),
+	)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to initialize logger: %v\n", err)
 		return 1
 	}
+
 	defer func() {
 		if err := closeLogger(); err != nil {
 			fmt.Fprintf(os.Stderr, "Failed to close logger: %v\n", err)
@@ -123,23 +135,23 @@ type multiError interface {
 	Unwrap() []error
 }
 
-func errorAttrs(err error) []slog.Attr{
+func errorAttrs(err error) []slog.Attr {
 	attrs := []slog.Attr{
-			{
-				Key:   "message",
-				Value: slog.StringValue(err.Error()),
-			},
-		}
+		{
+			Key:   "message",
+			Value: slog.StringValue(err.Error()),
+		},
+	}
 
-		attrs = append(attrs, linkoerr.Attrs(err)...) 
-		if stackErr, ok := errors.AsType[stackTracer](err); ok {
-			attrs = append(attrs, slog.Attr{
-				Key:   "stack_trace",
-				Value: slog.StringValue(fmt.Sprintf("%+v", stackErr.StackTrace())),
-			})
-		}
+	attrs = append(attrs, linkoerr.Attrs(err)...)
+	if stackErr, ok := errors.AsType[stackTracer](err); ok {
+		attrs = append(attrs, slog.Attr{
+			Key:   "stack_trace",
+			Value: slog.StringValue(fmt.Sprintf("%+v", stackErr.StackTrace())),
+		})
+	}
 
-		return attrs
+	return attrs
 }
 
 func replaceAttr(groups []string, a slog.Attr) slog.Attr {
@@ -149,16 +161,15 @@ func replaceAttr(groups []string, a slog.Attr) slog.Attr {
 			return a
 		}
 
-		if me, meOk:= errors.AsType[multiError](err); meOk {
+		if me, meOk := errors.AsType[multiError](err); meOk {
 			var errAttrs []slog.Attr
 			for i, e := range me.Unwrap() {
-				key:=fmt.Sprintf("error_%d", i+1)		
+				key := fmt.Sprintf("error_%d", i+1)
 				errAttrs = append(errAttrs, slog.GroupAttrs(key, errorAttrs(e)...))
 			}
 			return slog.GroupAttrs("errors", errAttrs...)
 		}
-		
-		
+
 		attrs := errorAttrs(err)
 		return slog.GroupAttrs("error", attrs...)
 	}
